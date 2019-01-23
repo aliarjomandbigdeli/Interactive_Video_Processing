@@ -21,7 +21,7 @@ def main(mode):
     height = 480
     drop_list = []
     cam = cv2.VideoCapture(0)
-    history = 400
+    history = 600
     learning_rate = 1.0 / history
 
     # Set the height and width of the screen
@@ -56,15 +56,15 @@ def main(mode):
         if (mode == BINARY_MODE):
             gray = cv2.cvtColor(background_sub, cv2.COLOR_RGB2GRAY)
             blur = cv2.GaussianBlur(gray, (3, 3), 0)
-            ret, binary_thresh = cv2.threshold(gray, 63, 255, cv2.THRESH_BINARY)
+            ret, binary_thresh = cv2.threshold(gray, 31, 255, cv2.THRESH_BINARY)
             cv2.imshow('binary', mask)
             threshold = binary_thresh
 
         elif (mode == CONTOUR_MODE):
             gray = cv2.cvtColor(background_sub, cv2.COLOR_RGB2GRAY)
             blur = cv2.GaussianBlur(gray, (3, 3), 0)
-            adapt_binary_for_contours = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                                              cv2.THRESH_BINARY, 35, 1)
+            adapt_binary_for_contours = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                                              cv2.THRESH_BINARY, 25, 1)
             # contours:
             contours, _ = cv2.findContours(adapt_binary_for_contours, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             filtered = []
@@ -75,7 +75,8 @@ def main(mode):
 
             objects = np.zeros([gray.shape[0], gray.shape[1], 1], 'uint8')
             for c in filtered:
-                cv2.drawContours(objects, [c], -1, 255, -1)
+                inside_color = 255
+                cv2.drawContours(objects, [c], -1, inside_color, -1)
             cv2.imshow("contours", objects)
             threshold = objects
 
@@ -89,8 +90,7 @@ def main(mode):
         for i in range(len(drop_list)):
 
             # Draw the drops
-            # if (draw_allowable(objects, drop_list[i][0], drop_list[i][1], 16, 16) and drop_list[i][2] == 1):
-            if (draw_allowable(threshold, drop_list[i][0], drop_list[i][1], 16, 16) and drop_list[i][2] == 1):
+            if (draw_allowable(threshold, drop_list[i][0], drop_list[i][1], 16, 16, mode) and drop_list[i][2] == 1):
                 screen.blit(water_drop, [drop_list[i][0], drop_list[i][1]])
             else:
                 drop_list[i][2] = 0
@@ -130,7 +130,7 @@ def get_frame(cap, scaling_factor):
     return frame
 
 
-def draw_allowable(mask, x, y, width, height):
+def draw_allowable(mask, x, y, width, height, mode):
     if (y < 100 or y > 550):
         return True
     x = int(x + width / 2 - 2)
@@ -140,11 +140,14 @@ def draw_allowable(mask, x, y, width, height):
     for i in range(x, x + 4):
         for j in range(y, y + 4):
             if (i < mask.shape[1] and j < mask.shape[0]):
-                if (int(mask[j, i]) == 0):
-                    # white_pixels_counter += 1
+                if (mode == CONTOUR_MODE and int(mask[j, i]) == 0):
                     black_pixels_counter += 1
-    # if (white_pixels_counter >= 5):
-    if (black_pixels_counter >= 5):
+                if (mode == BINARY_MODE and int(mask[j, i]) != 0):
+                    black_pixels_counter += 1
+
+    if (white_pixels_counter >= 5 and mode == BINARY_MODE):
+        return False
+    elif (black_pixels_counter >= 5 and mode == CONTOUR_MODE):
         return False
     else:
         return True
@@ -153,4 +156,5 @@ def draw_allowable(mask, x, y, width, height):
 
 if __name__ == '__main__':
     mode = CONTOUR_MODE
+    # mode = BINARY_MODE
     main(mode)
