@@ -8,8 +8,11 @@ import cv2
 .. since:: 1/22/2019
 """
 
+CONTOUR_MODE = 1
+BINARY_MODE = 0
 
-def main():
+
+def main(mode):
     # Initialize the game engine
     pygame.init()
 
@@ -18,7 +21,7 @@ def main():
     height = 480
     drop_list = []
     cam = cv2.VideoCapture(0)
-    history = 600
+    history = 400
     learning_rate = 1.0 / history
 
     # Set the height and width of the screen
@@ -35,7 +38,7 @@ def main():
     clock = pygame.time.Clock()
     water_drop = pygame.image.load("drop.png").convert_alpha()
     bg_subtractor = cv2.createBackgroundSubtractorMOG2()
-    # Loop until the user press 'Esc' key
+    # Loop until the user press 'Esc' key or click close button
     done = False
     while not done:
 
@@ -49,10 +52,33 @@ def main():
         mask = bg_subtractor.apply(frame, learningRate=learning_rate)
         mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
         background_sub = mask & frame
-        gray = cv2.cvtColor(background_sub, cv2.COLOR_RGB2GRAY)
-        blur = cv2.GaussianBlur(gray, (3, 3), 0)
-        ret, binary_thresh = cv2.threshold(gray, 63, 255, cv2.THRESH_BINARY)
-        cv2.imshow('binary', mask)
+
+        if (mode == BINARY_MODE):
+            gray = cv2.cvtColor(background_sub, cv2.COLOR_RGB2GRAY)
+            blur = cv2.GaussianBlur(gray, (3, 3), 0)
+            ret, binary_thresh = cv2.threshold(gray, 63, 255, cv2.THRESH_BINARY)
+            cv2.imshow('binary', mask)
+            threshold = binary_thresh
+
+        elif (mode == CONTOUR_MODE):
+            gray = cv2.cvtColor(background_sub, cv2.COLOR_RGB2GRAY)
+            blur = cv2.GaussianBlur(gray, (3, 3), 0)
+            adapt_binary_for_contours = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                                              cv2.THRESH_BINARY, 35, 1)
+            # contours:
+            contours, _ = cv2.findContours(adapt_binary_for_contours, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            filtered = []
+            for c in contours:
+                if cv2.contourArea(c) < 1000:
+                    continue
+                filtered.append(c)
+
+            objects = np.zeros([gray.shape[0], gray.shape[1], 1], 'uint8')
+            for c in filtered:
+                cv2.drawContours(objects, [c], -1, 255, -1)
+            cv2.imshow("contours", objects)
+            threshold = objects
+
         screen.fill([0, 0, 0])
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = np.rot90(img)
@@ -63,7 +89,8 @@ def main():
         for i in range(len(drop_list)):
 
             # Draw the drops
-            if (draw_allowable(binary_thresh, drop_list[i][0], drop_list[i][1], 16, 16) and drop_list[i][2] == 1):
+            # if (draw_allowable(objects, drop_list[i][0], drop_list[i][1], 16, 16) and drop_list[i][2] == 1):
+            if (draw_allowable(threshold, drop_list[i][0], drop_list[i][1], 16, 16) and drop_list[i][2] == 1):
                 screen.blit(water_drop, [drop_list[i][0], drop_list[i][1]])
             else:
                 drop_list[i][2] = 0
@@ -109,12 +136,15 @@ def draw_allowable(mask, x, y, width, height):
     x = int(x + width / 2 - 2)
     y = int(y + height / 2 - 2)
     white_pixels_counter = 0
+    black_pixels_counter = 0
     for i in range(x, x + 4):
         for j in range(y, y + 4):
             if (i < mask.shape[1] and j < mask.shape[0]):
-                if (int(mask[j, i]) != 0):
-                    white_pixels_counter += 1
-    if (white_pixels_counter >= 5):
+                if (int(mask[j, i]) == 0):
+                    # white_pixels_counter += 1
+                    black_pixels_counter += 1
+    # if (white_pixels_counter >= 5):
+    if (black_pixels_counter >= 5):
         return False
     else:
         return True
@@ -122,4 +152,5 @@ def draw_allowable(mask, x, y, width, height):
 
 
 if __name__ == '__main__':
-    main()
+    mode = CONTOUR_MODE
+    main(mode)
